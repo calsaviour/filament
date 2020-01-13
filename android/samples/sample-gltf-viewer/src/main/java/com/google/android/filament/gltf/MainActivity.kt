@@ -43,6 +43,8 @@ class MainActivity : Activity() {
         }
     }
 
+    private enum class Gesture { NONE, ORBIT, PAN, ZOOM }
+
     private lateinit var surfaceView: SurfaceView
     private lateinit var uiHelper: UiHelper
     private lateinit var choreographer: Choreographer
@@ -50,7 +52,6 @@ class MainActivity : Activity() {
     private val animator = ValueAnimator.ofFloat(0.0f, (2.0 * PI).toFloat())
     private var width = 720
     private var height = 1280
-    private var strafing = false
 
     // gltfio and utils objects
     private lateinit var manipulator: Manipulator
@@ -85,39 +86,72 @@ class MainActivity : Activity() {
                 .viewport(width, height)
                 .build(Manipulator.Mode.ORBIT)
 
-        surfaceView.setOnTouchListener { v, event ->
+        var currentGesture = Gesture.NONE
+        val tentativePanEvents = ArrayList<MotionEvent>()
+        val tentativeOrbitEvents = ArrayList<MotionEvent>()
+        val tentativeZoomEvents = ArrayList<MotionEvent>()
+        val kGestureConfidenceThreshold = 2
+
+        val endGesture = {
+            tentativePanEvents.clear()
+            tentativeOrbitEvents.clear()
+            tentativeZoomEvents.clear()
+            currentGesture = Gesture.NONE
+            manipulator.grabEnd()
+        }
+
+        surfaceView.setOnTouchListener func@{ _, event ->
             val x = event.getX(0).toInt()
             val y = height - event.getY(0).toInt()
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    manipulator.grabEnd()
-                    strafing = false
-                    manipulator.grabBegin(x, y, strafing)
-                    Log.e("gltf-viewer", "down ${x} ${y}")
-                }
+            when (event.actionMasked) {
                 MotionEvent.ACTION_MOVE -> {
-                    if (event.pointerCount == 2 && !strafing) {
-                        strafing = true
-                        manipulator.grabEnd()
-                        manipulator.grabBegin(x, y, strafing)
-                        Log.e("gltf-viewer", "move strafe ${x} ${y}")
-                    } else {
-                        Log.e("gltf-viewer", "move ${x} ${y} -- ${event.pointerCount}")
+
+                    // CANCEL GESTURE DUE TO UNEXPECTED POINTER COUNT
+
+                    if ((event.pointerCount != 1 && currentGesture == Gesture.ORBIT) ||
+                            (event.pointerCount != 2 && currentGesture == Gesture.PAN) ||
+                            (event.pointerCount != 2 && currentGesture == Gesture.ZOOM)) {
+                        endGesture()
+                        return@func true
                     }
-                    if (strafing && event.pointerCount == 1) {
-                        // Do nothing when a single touch is lifted from a strafe gesture.
-                        // Without this explicit test, users often see "jumpiness" in the camera.
-                    } else {
+
+                    // UPDATE EXISTING GESTURE
+
+                    if (currentGesture != Gesture.NONE) {
                         manipulator.grabUpdate(x, y)
+                        return@func true
                     }
+
+                    // DETECT NEW GESTURE
+
+                    if (event.pointerCount == 1) {
+                        tentativeOrbitEvents.add(event)
+                    }
+
+                    if (event.pointerCount == 2) {
+                        tentativePanEvents.add(event)
+                        tentativeZoomEvents.add(event)
+                    }
+
+                    if (event.pointerCount == 1) {
+                        if (tentativeOrbitEvents.size > kGestureConfidenceThreshold) {
+                            manipulator.grabBegin(x, y, false)
+                            currentGesture = Gesture.ORBIT
+                            return@func true
+                        }
+                    }
+
+                    if (event.pointerCount == 2) {
+                        if (tentativePanEvents.size > kGestureConfidenceThreshold) {
+                            manipulator.grabBegin(x, y, true)
+                            currentGesture = Gesture.PAN
+                            return@func true
+                        }
+                    }
+
                 }
-                MotionEvent.ACTION_CANCEL-> {
-                    Log.e("gltf-viewer", "cancel")
-                    manipulator.grabEnd()
-                }
-                MotionEvent.ACTION_UP -> {
-                    Log.e("gltf-viewer", "up")
-                    manipulator.grabEnd()
+                MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_UP -> {
+                    endGesture()
                 }
             }
             true
