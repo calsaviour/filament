@@ -33,6 +33,7 @@ import com.google.android.filament.gltfio.*
 
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
+import kotlin.math.abs
 
 class MainActivity : Activity() {
 
@@ -86,11 +87,32 @@ class MainActivity : Activity() {
                 .viewport(width, height)
                 .build(Manipulator.Mode.ORBIT)
 
+        data class TouchEvent(var pt0: Float2, var pt1: Float2, var count: Int) {
+            constructor() : this(Float2(0f), Float2(0f), 0)
+            constructor(me: MotionEvent) : this() {
+                if (me.pointerCount >= 1) {
+                    this.pt0.x = me.getX(0)
+                    this.pt0.y = me.getY(0)
+                    this.count = 1
+                }
+                if (me.pointerCount >= 2) {
+                    this.pt1.x = me.getX(1)
+                    this.pt1.y = me.getY(1)
+                    this.count++
+                }
+            }
+        }
+
         var currentGesture = Gesture.NONE
-        val tentativePanEvents = ArrayList<MotionEvent>()
-        val tentativeOrbitEvents = ArrayList<MotionEvent>()
-        val tentativeZoomEvents = ArrayList<MotionEvent>()
-        val kGestureConfidenceThreshold = 2
+        var previousEvent = TouchEvent()
+        val tentativePanEvents = ArrayList<TouchEvent>()
+        val tentativeOrbitEvents = ArrayList<TouchEvent>()
+        val tentativeZoomEvents = ArrayList<TouchEvent>()
+
+        val kGestureConfidenceCount = 2
+        val kPanConfidenceDistance = 5
+        val kZoomConfidenceDistance = 10
+        val kZoomSpeed = 1f / 10f
 
         val endGesture = {
             tentativePanEvents.clear()
@@ -98,6 +120,28 @@ class MainActivity : Activity() {
             tentativeZoomEvents.clear()
             currentGesture = Gesture.NONE
             manipulator.grabEnd()
+        }
+
+        val getTouchesMidpoint = { event: TouchEvent -> mix(event.pt0, event.pt1, 0.5f) }
+        val getPinchDistance = { event: TouchEvent -> distance(event.pt0, event.pt1) }
+        val isOrbitGesture = { tentativeOrbitEvents.size > kGestureConfidenceCount }
+
+        val isPanGesture: () -> Boolean = func@ {
+            if (tentativePanEvents.size <= kGestureConfidenceCount) {
+                return@func false
+            }
+            val oldest = getTouchesMidpoint(tentativePanEvents.first())
+            val newest = getTouchesMidpoint(tentativePanEvents.last())
+            distance(oldest, newest) > kPanConfidenceDistance
+        }
+
+        val isZoomGesture: () -> Boolean = func@ {
+            if (tentativeZoomEvents.size <= kGestureConfidenceCount) {
+                return@func false
+            }
+            val oldest = getPinchDistance(tentativeZoomEvents.first())
+            val newest = getPinchDistance(tentativeZoomEvents.last())
+            abs(newest - oldest) > kZoomConfidenceDistance
         }
 
         surfaceView.setOnTouchListener func@{ _, event ->
@@ -117,6 +161,14 @@ class MainActivity : Activity() {
 
                     // UPDATE EXISTING GESTURE
 
+                    if (currentGesture == Gesture.ZOOM) {
+                        val d0 = getPinchDistance(previousEvent)
+                        val d1 = getPinchDistance(TouchEvent(event))
+                        manipulator.zoom(x, y, (d0 - d1) * kZoomSpeed)
+                        previousEvent = TouchEvent(event)
+                        return@func true
+                    }
+
                     if (currentGesture != Gesture.NONE) {
                         manipulator.grabUpdate(x, y)
                         return@func true
@@ -125,30 +177,31 @@ class MainActivity : Activity() {
                     // DETECT NEW GESTURE
 
                     if (event.pointerCount == 1) {
-                        tentativeOrbitEvents.add(event)
+                        tentativeOrbitEvents.add(TouchEvent(event))
                     }
 
                     if (event.pointerCount == 2) {
-                        tentativePanEvents.add(event)
-                        tentativeZoomEvents.add(event)
+                        tentativePanEvents.add(TouchEvent(event))
+                        tentativeZoomEvents.add(TouchEvent(event))
                     }
 
-                    if (event.pointerCount == 1) {
-                        if (tentativeOrbitEvents.size > kGestureConfidenceThreshold) {
-                            manipulator.grabBegin(x, y, false)
-                            currentGesture = Gesture.ORBIT
-                            return@func true
-                        }
+                    if (isOrbitGesture()) {
+                        manipulator.grabBegin(x, y, false)
+                        currentGesture = Gesture.ORBIT
+                        return@func true
                     }
 
-                    if (event.pointerCount == 2) {
-                        if (tentativePanEvents.size > kGestureConfidenceThreshold) {
-                            manipulator.grabBegin(x, y, true)
-                            currentGesture = Gesture.PAN
-                            return@func true
-                        }
+                    if (isZoomGesture()) {
+                        currentGesture = Gesture.ZOOM
+                        previousEvent = TouchEvent(event)
+                        return@func true
                     }
 
+                    if (isPanGesture()) {
+                        manipulator.grabBegin(x, y, true)
+                        currentGesture = Gesture.PAN
+                        return@func true
+                    }
                 }
                 MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_UP -> {
                     endGesture()
@@ -199,7 +252,7 @@ class MainActivity : Activity() {
             assetLoader.createAssetFromJson(ByteBuffer.wrap(bytes))!!
         }
 
-        var resourceLoader = ResourceLoader(engine)
+        val resourceLoader = ResourceLoader(engine)
         for (uri in filamentAsset.resourceUris) {
             val buffer = readUncompressedAsset("models/$uri")
             resourceLoader.addResourceData(uri, buffer)
@@ -218,7 +271,7 @@ class MainActivity : Activity() {
         val maxExtent = 2.0f * max(halfExtent)
         val scaleFactor = 2.0f / maxExtent
         center.z = center.z + 4.0f / scaleFactor
-        var xform = scale(Float3(scaleFactor)) * translation(Float3(-center))
+        val xform = scale(Float3(scaleFactor)) * translation(Float3(-center))
         tm.setTransform(tm.getInstance(filamentAsset.root), transpose(xform).toFloatArray())
 
         // Light Sources
@@ -297,9 +350,9 @@ class MainActivity : Activity() {
         override fun doFrame(frameTimeNanos: Long) {
             choreographer.postFrameCallback(this)
 
-            var eyepos = floatArrayOf(0.0f, 0.0f, 0.0f)
-            var target = floatArrayOf(0.0f, 0.0f, 0.0f)
-            var upward = floatArrayOf(0.0f, 0.0f, 0.0f)
+            val eyepos = floatArrayOf(0.0f, 0.0f, 0.0f)
+            val target = floatArrayOf(0.0f, 0.0f, 0.0f)
+            val upward = floatArrayOf(0.0f, 0.0f, 0.0f)
             manipulator.getLookAt(eyepos, target, upward)
 
             camera.lookAt(
