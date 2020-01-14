@@ -24,7 +24,6 @@ import android.view.Choreographer
 import android.view.Surface
 import android.view.SurfaceView
 import android.util.Log
-import android.view.MotionEvent
 import android.view.animation.LinearInterpolator
 
 import com.google.android.filament.*
@@ -33,7 +32,6 @@ import com.google.android.filament.gltfio.*
 
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
-import kotlin.math.abs
 
 class MainActivity : Activity() {
 
@@ -43,8 +41,6 @@ class MainActivity : Activity() {
             AssetLoader.init()
         }
     }
-
-    private enum class Gesture { NONE, ORBIT, PAN, ZOOM }
 
     private lateinit var surfaceView: SurfaceView
     private lateinit var uiHelper: UiHelper
@@ -58,6 +54,7 @@ class MainActivity : Activity() {
     private lateinit var manipulator: Manipulator
     private lateinit var assetLoader: AssetLoader
     private lateinit var filamentAsset: FilamentAsset
+    private lateinit var gestureDetector: GestureDetector
 
     // core filament objects
     private lateinit var engine: Engine
@@ -87,128 +84,7 @@ class MainActivity : Activity() {
                 .viewport(width, height)
                 .build(Manipulator.Mode.ORBIT)
 
-        data class TouchEvent(var pt0: Float2, var pt1: Float2, var count: Int) {
-            constructor() : this(Float2(0f), Float2(0f), 0)
-            constructor(me: MotionEvent) : this() {
-                if (me.pointerCount >= 1) {
-                    this.pt0.x = me.getX(0)
-                    this.pt0.y = me.getY(0)
-                    this.count = 1
-                }
-                if (me.pointerCount >= 2) {
-                    this.pt1.x = me.getX(1)
-                    this.pt1.y = me.getY(1)
-                    this.count++
-                }
-            }
-        }
-
-        var currentGesture = Gesture.NONE
-        var previousEvent = TouchEvent()
-        val tentativePanEvents = ArrayList<TouchEvent>()
-        val tentativeOrbitEvents = ArrayList<TouchEvent>()
-        val tentativeZoomEvents = ArrayList<TouchEvent>()
-
-        val kGestureConfidenceCount = 2
-        val kPanConfidenceDistance = 5
-        val kZoomConfidenceDistance = 10
-        val kZoomSpeed = 1f / 10f
-
-        val endGesture = {
-            tentativePanEvents.clear()
-            tentativeOrbitEvents.clear()
-            tentativeZoomEvents.clear()
-            currentGesture = Gesture.NONE
-            manipulator.grabEnd()
-        }
-
-        val getTouchesMidpoint = { event: TouchEvent -> mix(event.pt0, event.pt1, 0.5f) }
-        val getPinchDistance = { event: TouchEvent -> distance(event.pt0, event.pt1) }
-        val isOrbitGesture = { tentativeOrbitEvents.size > kGestureConfidenceCount }
-
-        val isPanGesture: () -> Boolean = func@ {
-            if (tentativePanEvents.size <= kGestureConfidenceCount) {
-                return@func false
-            }
-            val oldest = getTouchesMidpoint(tentativePanEvents.first())
-            val newest = getTouchesMidpoint(tentativePanEvents.last())
-            distance(oldest, newest) > kPanConfidenceDistance
-        }
-
-        val isZoomGesture: () -> Boolean = func@ {
-            if (tentativeZoomEvents.size <= kGestureConfidenceCount) {
-                return@func false
-            }
-            val oldest = getPinchDistance(tentativeZoomEvents.first())
-            val newest = getPinchDistance(tentativeZoomEvents.last())
-            abs(newest - oldest) > kZoomConfidenceDistance
-        }
-
-        surfaceView.setOnTouchListener func@{ _, event ->
-            val x = event.getX(0).toInt()
-            val y = height - event.getY(0).toInt()
-            when (event.actionMasked) {
-                MotionEvent.ACTION_MOVE -> {
-
-                    // CANCEL GESTURE DUE TO UNEXPECTED POINTER COUNT
-
-                    if ((event.pointerCount != 1 && currentGesture == Gesture.ORBIT) ||
-                            (event.pointerCount != 2 && currentGesture == Gesture.PAN) ||
-                            (event.pointerCount != 2 && currentGesture == Gesture.ZOOM)) {
-                        endGesture()
-                        return@func true
-                    }
-
-                    // UPDATE EXISTING GESTURE
-
-                    if (currentGesture == Gesture.ZOOM) {
-                        val d0 = getPinchDistance(previousEvent)
-                        val d1 = getPinchDistance(TouchEvent(event))
-                        manipulator.zoom(x, y, (d0 - d1) * kZoomSpeed)
-                        previousEvent = TouchEvent(event)
-                        return@func true
-                    }
-
-                    if (currentGesture != Gesture.NONE) {
-                        manipulator.grabUpdate(x, y)
-                        return@func true
-                    }
-
-                    // DETECT NEW GESTURE
-
-                    if (event.pointerCount == 1) {
-                        tentativeOrbitEvents.add(TouchEvent(event))
-                    }
-
-                    if (event.pointerCount == 2) {
-                        tentativePanEvents.add(TouchEvent(event))
-                        tentativeZoomEvents.add(TouchEvent(event))
-                    }
-
-                    if (isOrbitGesture()) {
-                        manipulator.grabBegin(x, y, false)
-                        currentGesture = Gesture.ORBIT
-                        return@func true
-                    }
-
-                    if (isZoomGesture()) {
-                        currentGesture = Gesture.ZOOM
-                        previousEvent = TouchEvent(event)
-                        return@func true
-                    }
-
-                    if (isPanGesture()) {
-                        manipulator.grabBegin(x, y, true)
-                        currentGesture = Gesture.PAN
-                        return@func true
-                    }
-                }
-                MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_UP -> {
-                    endGesture()
-                }
-            }
-            true
-        }
+        gestureDetector = GestureDetector(surfaceView, manipulator)
 
         // Engine, Renderer, Scene, View, Camera
         // -------------------------------------
