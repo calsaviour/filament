@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-package com.google.android.filament.gltf
+package com.google.android.filament.utils
 
 import android.view.MotionEvent
 import android.view.View
-import com.google.android.filament.gltfio.Manipulator
+import com.google.android.filament.utils.Manipulator
 
 class GestureDetector(private val view: View, private val manipulator: Manipulator) {
     private enum class Gesture { NONE, ORBIT, PAN, ZOOM }

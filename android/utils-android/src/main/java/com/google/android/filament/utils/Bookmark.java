@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.android.filament.gltfio;
+package com.google.android.filament.utils;
 
 public class Bookmark {
     private long mNativeObject;

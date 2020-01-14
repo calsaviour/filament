@@ -34,6 +34,8 @@ dependencies {
     implementation 'com.google.android.filament:filamat-android-full:1.4.4'
     // glTF 2.0 loader
     implementation 'com.google.android.filament:gltfio-android:1.4.4'
+    // Filament utilities
+    implementation 'com.google.android.filament:utils-android:1.4.4'
 }
 ```
 
@@ -144,6 +146,7 @@ and tools.
   - `filamat-android`:     Filament material generation library (AAR) for Android
   - `filament-android`:    Filament library (AAR) for Android
   - `gltfio-android`:      Filament glTF loading library (AAR) for Android
+  - `utils-android`:       Utility library (AAR) for Android
   - `samples`:             Android-specific Filament samples
 - `art`:                   Source for various artworks (logos, PDF manuals, etc.)
 - `assets`:                3D assets to use with sample applications

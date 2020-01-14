@@ -1,0 +1,46 @@
+apply plugin: 'com.android.library'
+
+android {
+    compileSdkVersion versions.compileSdk
+    defaultConfig {
+        minSdkVersion versions.minSdk
+        targetSdkVersion versions.targetSdk
+
+        externalNativeBuild {
+            cmake {
+                arguments.add("-DANDROID_PIE=ON")
+                arguments.add("-DANDROID_PLATFORM=android-${versions.targetSdk}".toString())
+                arguments.add("-DANDROID_STL=c++_static")
+                arguments.add("-DFILAMENT_DIST_DIR=${filamentPath}".toString())
+                cppFlags.add("-std=c++14")
+                if (project.hasProperty('extra_cmake_args')) {
+                    arguments.add(extra_cmake_args)
+                }
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "CMakeLists.txt"
+        }
+    }
+
+    sourceSets {
+        main {
+            jni.srcDirs "src/main/cpp"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    implementation deps.androidx.annotations
+    implementation project(':filament-android')
+}
+
+apply from: rootProject.file('gradle/gradle-mvn-push.gradle')

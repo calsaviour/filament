@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.android.filament.gltf
+package com.google.android.filament.utils
 
 import kotlin.math.*
 

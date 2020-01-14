@@ -1,5 +1,6 @@
 // Libraries
 include ':filament-android'
+include ':utils-android'
 include ':filamat-android'
 include ':gltfio-android'
 

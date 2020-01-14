@@ -16,7 +16,7 @@
 
 @file:Suppress("NOTHING_TO_INLINE")
 
-package com.google.android.filament.gltf
+package com.google.android.filament.utils
 
 const val PI          = 3.1415926536f
 const val HALF_PI     = PI * 0.5f

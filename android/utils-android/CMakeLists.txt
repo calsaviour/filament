@@ -13,6 +13,10 @@ add_library(backend STATIC IMPORTED)
 set_target_properties(backend PROPERTIES IMPORTED_LOCATION
         ${FILAMENT_DIR}/lib/${ANDROID_ABI}/libbackend.a)
 
+add_library(camutils STATIC IMPORTED)
+set_target_properties(camutils PROPERTIES IMPORTED_LOCATION
+        ${FILAMENT_DIR}/lib/${ANDROID_ABI}/libcamutils.a)
+
 add_library(utils STATIC IMPORTED)
 set_target_properties(utils PROPERTIES IMPORTED_LOCATION
         ${FILAMENT_DIR}/lib/${ANDROID_ABI}/libutils.a)
@@ -20,6 +24,10 @@ set_target_properties(utils PROPERTIES IMPORTED_LOCATION
 add_library(filaflat STATIC IMPORTED)
 set_target_properties(filaflat PROPERTIES IMPORTED_LOCATION
         ${FILAMENT_DIR}/lib/${ANDROID_ABI}/libfilaflat.a)
+
+add_library(image STATIC IMPORTED)
+set_target_properties(image PROPERTIES IMPORTED_LOCATION
+        ${FILAMENT_DIR}/lib/${ANDROID_ABI}/libimage.a)
 
 add_library(ibl STATIC IMPORTED)
 set_target_properties(ibl PROPERTIES IMPORTED_LOCATION
@@ -33,14 +41,6 @@ add_library(filabridge STATIC IMPORTED)
 set_target_properties(filabridge PROPERTIES IMPORTED_LOCATION
         ${FILAMENT_DIR}/lib/${ANDROID_ABI}/libfilabridge.a)
 
-add_library(gltfio STATIC IMPORTED)
-set_target_properties(gltfio PROPERTIES IMPORTED_LOCATION
-        ${FILAMENT_DIR}/lib/${ANDROID_ABI}/libgltfio_core.a)
-
-add_library(gltfio_resources STATIC IMPORTED)
-set_target_properties(gltfio_resources PROPERTIES IMPORTED_LOCATION
-        ${FILAMENT_DIR}/lib/${ANDROID_ABI}/libgltfio_resources.a)
-
 add_library(bluevk STATIC IMPORTED)
 set_target_properties(bluevk PROPERTIES IMPORTED_LOCATION
         ${FILAMENT_DIR}/lib/${ANDROID_ABI}/libbluevk.a)
@@ -53,14 +53,12 @@ include_directories(${FILAMENT_DIR}/include
         ..
         ../../libs/utils/include)
 
-set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} -Wl,--version-script=${CMAKE_SOURCE_DIR}/libgltfio-jni.map")
+set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} -Wl,--version-script=${CMAKE_SOURCE_DIR}/libutils-android-jni.map")
 
-add_library(gltfio-jni SHARED
-        src/main/cpp/Animator.cpp
-        src/main/cpp/AssetLoader.cpp
-        src/main/cpp/FilamentAsset.cpp
-        src/main/cpp/MaterialProvider.cpp
-        src/main/cpp/ResourceLoader.cpp
+add_library(utils-android-jni SHARED
+        src/main/cpp/Bookmark.cpp
+        src/main/cpp/KtxLoader.cpp
+        src/main/cpp/Manipulator.cpp
 
         ../common/CallbackUtils.cpp
         ../common/NioUtils.cpp
@@ -68,17 +66,18 @@ add_library(gltfio-jni SHARED
         $<TARGET_OBJECTS:filament-jni-obj>
 )
 
-set_target_properties(gltfio-jni PROPERTIES LINK_DEPENDS
-        ${CMAKE_CURRENT_SOURCE_DIR}/libgltfio-jni.symbols)
+set_target_properties(utils-android-jni PROPERTIES LINK_DEPENDS
+        ${CMAKE_CURRENT_SOURCE_DIR}/libutils-android-jni.symbols)
 
 # The ordering in the following list is important because CMake does not have dependency information.
-target_link_libraries(gltfio-jni
-        gltfio
+target_link_libraries(utils-android-jni
         filament
         backend
         filaflat
         filabridge
+        camutils
         geometry
+        image
         ibl
         utils
         log
@@ -86,10 +85,9 @@ target_link_libraries(gltfio-jni
         EGL
         android
         jnigraphics
-        gltfio_resources
         m
 )
 
 if (FILAMENT_SUPPORTS_VULKAN)
-    target_link_libraries(gltfio-jni bluevk smol-v)
+    target_link_libraries(utils-android-jni bluevk smol-v)
 endif()

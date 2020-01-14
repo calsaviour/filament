@@ -16,7 +16,7 @@
 
 @file:Suppress("NOTHING_TO_INLINE")
 
-package com.google.android.filament.gltf
+package com.google.android.filament.utils
 
 import kotlin.math.abs
 import kotlin.math.max

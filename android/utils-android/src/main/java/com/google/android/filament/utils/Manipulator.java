@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.android.filament.gltfio;
+package com.google.android.filament.utils;
 
 import androidx.annotation.IntRange;
 import androidx.annotation.NonNull;
