@@ -24,7 +24,7 @@
 using namespace filament::camutils;
 using namespace filament::math;
 
-using Builder = Manipulator<float>::Config;
+using Builder = Manipulator<float>::Builder;
 
 extern "C" JNIEXPORT jlong Java_com_google_android_filament_gltfio_Manipulator_nCreateBuilder(JNIEnv*, jclass) {
     return (jlong) new Builder {};
@@ -37,68 +37,67 @@ extern "C" JNIEXPORT void Java_com_google_android_filament_gltfio_Manipulator_nD
 
 extern "C" JNIEXPORT void Java_com_google_android_filament_gltfio_Manipulator_nBuilderViewport(JNIEnv*, jclass, jlong nativeBuilder, jint width, jint height) {
     Builder* builder = (Builder*) nativeBuilder;
-    builder->viewport[0] = width;
-    builder->viewport[1] = height;
+    builder->viewport(width, height);
 }
 
 extern "C" JNIEXPORT void Java_com_google_android_filament_gltfio_Manipulator_nBuilderTargetPosition(JNIEnv*, jclass, jlong nativeBuilder, jfloat x, jfloat y, jfloat z) {
     Builder* builder = (Builder*) nativeBuilder;
-    builder->targetPosition = float3(x, y, z);
+    builder->targetPosition(x, y, z);
 }
 
 extern "C" JNIEXPORT void Java_com_google_android_filament_gltfio_Manipulator_nBuilderUpVector(JNIEnv*, jclass, jlong nativeBuilder, jfloat x, jfloat y, jfloat z) {
     Builder* builder = (Builder*) nativeBuilder;
-    builder->upVector = float3(x, y, z);
+    builder->upVector(x, y, z);
 }
 
 extern "C" JNIEXPORT void Java_com_google_android_filament_gltfio_Manipulator_nBuilderZoomSpeed(JNIEnv*, jclass, jlong nativeBuilder, jfloat arg) {
     Builder* builder = (Builder*) nativeBuilder;
-    builder->zoomSpeed = arg;
+    builder->zoomSpeed(arg);
 }
 
 extern "C" JNIEXPORT void Java_com_google_android_filament_gltfio_Manipulator_nBuilderOrbitHomePosition(JNIEnv*, jclass, jlong nativeBuilder, jfloat x, jfloat y, jfloat z) {
     Builder* builder = (Builder*) nativeBuilder;
-    builder->orbitHomePosition = float3(x, y, z);
+    builder->orbitHomePosition(x, y, z);
 }
 
 extern "C" JNIEXPORT void Java_com_google_android_filament_gltfio_Manipulator_nBuilderOrbitSpeed(JNIEnv*, jclass, jlong nativeBuilder, jfloat x, jfloat y) {
     Builder* builder = (Builder*) nativeBuilder;
-    builder->orbitSpeed = float2(x, y);
+    builder->orbitSpeed(x, y);
 }
 
 extern "C" JNIEXPORT void Java_com_google_android_filament_gltfio_Manipulator_nBuilderFovDirection(JNIEnv*, jclass, jlong nativeBuilder, jint arg) {
     Builder* builder = (Builder*) nativeBuilder;
-    builder->fovDirection = (Fov) arg;
+    builder->fovDirection((Fov) arg);
 }
 
 extern "C" JNIEXPORT void Java_com_google_android_filament_gltfio_Manipulator_nBuilderFovDegrees(JNIEnv*, jclass, jlong nativeBuilder, jfloat arg) {
     Builder* builder = (Builder*) nativeBuilder;
-    builder->fovDegrees = arg;
+    builder->fovDegrees(arg);
 }
 
 extern "C" JNIEXPORT void Java_com_google_android_filament_gltfio_Manipulator_nBuilderFarPlane(JNIEnv*, jclass, jlong nativeBuilder, jfloat distance) {
     Builder* builder = (Builder*) nativeBuilder;
-    builder->farPlane = distance;
+    builder->farPlane(distance);
 }
 
 extern "C" JNIEXPORT void Java_com_google_android_filament_gltfio_Manipulator_nBuilderMapExtent(JNIEnv*, jclass, jlong nativeBuilder, jfloat width, jfloat height) {
     Builder* builder = (Builder*) nativeBuilder;
-    builder->mapExtent = float2(width, height);
+    builder->mapExtent(width, height);
 }
 
 extern "C" JNIEXPORT void Java_com_google_android_filament_gltfio_Manipulator_nBuilderMapMinDistance(JNIEnv*, jclass, jlong nativeBuilder, jfloat arg) {
     Builder* builder = (Builder*) nativeBuilder;
-    builder->mapMinDistance = arg;
+    builder->mapMinDistance(arg);
 }
 
 extern "C" JNIEXPORT void Java_com_google_android_filament_gltfio_Manipulator_nBuilderGroundPlane(JNIEnv*, jclass, jlong nativeBuilder, jfloat a, jfloat b, jfloat c, jfloat d) {
     Builder* builder = (Builder*) nativeBuilder;
-    builder->groundPlane = float4(a, b, c, d);
+    builder->groundPlane(a, b, c, d);
 }
 
 extern "C" JNIEXPORT long Java_com_google_android_filament_gltfio_Manipulator_nBuilderBuild(JNIEnv*, jclass, jlong nativeBuilder, jint mode) {
     Builder* builder = (Builder*) nativeBuilder;
-    return (jlong) Manipulator<float>::create((Mode) mode, *builder);
+    return (jlong) builder->build((Mode) mode, *builder);
 }
 
 extern "C" JNIEXPORT void JNICALL
