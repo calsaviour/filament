@@ -20,7 +20,6 @@
 
 #include "FrameGraphPass.h"
 #include "FrameGraphHandle.h"
-#include "FrameGraphPassResources.h"
 
 #include <fg/fg/ResourceEntry.h>
 
