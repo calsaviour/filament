@@ -255,13 +255,22 @@ void FRenderer::renderJob(ArenaScope& arena, FView& view) {
 
     FrameGraph fg(engine.getResourceAllocator());
 
+    // FIXME: when the view doesn't ask for a clear, but it's drawn in an intermediate buffer
+    //        that buffer needs to be cleared with transparent pixels if blending is enabled
+    const TargetBufferFlags clearFlags = (view.getClearFlags() & TargetBufferFlags::COLOR)
+                                   | TargetBufferFlags::DEPTH;
+
+    const TargetBufferFlags discardedFlags = view.getDiscardedTargetBuffers();
+
+    const float4 clearColor = view.getClearColor();
+
     // Figure out if we need to blend this view into the framebuffer. Maybe this should be
     // explicit, but since we don't have an API right now, we use heuristics:
     // - we are keeping the color buffer before rendering, and
     // - we are not clearing or clearing with alpha
     // FIXME: make this an explicit API
-    const bool blending = !(view.getDiscardedTargetBuffers() & TargetBufferFlags::COLOR)
-            && (!view.getClearTargetColor() || view.getClearColor().a < 1.0);
+    const bool blending = !(discardedFlags & TargetBufferFlags::COLOR)
+            && (!(clearFlags & TargetBufferFlags::COLOR) || clearColor.a < 1.0);
 
     // If the swapchain is transparent or if we blend into it, we need to allocate our intermediate
     // buffers with an alpha channel.
@@ -272,8 +281,7 @@ void FRenderer::renderJob(ArenaScope& arena, FView& view) {
 
     const Handle<HwRenderTarget> viewRenderTarget = getRenderTarget(view);
     FrameGraphRenderTargetHandle fgViewRenderTarget = fg.importRenderTarget("viewRenderTarget",
-            { .viewport = vp }, viewRenderTarget, vp.width, vp.height,
-            view.getDiscardedTargetBuffers());
+            { .viewport = vp }, viewRenderTarget, vp.width, vp.height, discardedFlags);
 
     /*
      * Depth + Color passes
@@ -342,19 +350,13 @@ void FRenderer::renderJob(ArenaScope& arena, FView& view) {
                 }
             });
 
-    // We only honor the view's color buffer clear flags, depth/stencil are handled by the FrameGraph
-    uint8_t viewClearFlags = view.getClearFlags() & (uint8_t)TargetBufferFlags::ALL;
-
-    // FIXME: when the view doesn't ask for a clear, but it's drawn in an intermediate buffer
-    //        that buffer needs to be cleared with transparent pixels if blending is enabled
-    TargetBufferFlags clearFlags = (TargetBufferFlags(viewClearFlags) & TargetBufferFlags::COLOR)
-                                   | TargetBufferFlags::DEPTH;
-
-    FrameGraphId<FrameGraphTexture> input;
-    input = colorPass(fg, config, pass, clearFlags, view.getClearColor());
+    colorPass(fg, config, pass, clearFlags, clearColor);
 
     // TODO: look for refraction draw calls only if screen-space refraction is enabled
-    input = refractionPass(fg, config, pass, input, view, clearFlags);
+    FrameGraphId<FrameGraphTexture> colorPassOutput =
+            refractionPass(fg, config, pass, view, clearFlags);
+
+    FrameGraphId<FrameGraphTexture> input = colorPassOutput;
 
     fg.simpleSideEffectPass("Finish Color Passes", [&view]() {
         // Unbind SSAO sampler, b/c the FrameGraph will delete the texture at the end of the pass.
@@ -388,7 +390,7 @@ void FRenderer::renderJob(ArenaScope& arena, FView& view) {
     // The intermediate buffer is accomplished with a "fake" dynamicScaling (i.e. blit)
     // operation.
 
-    const bool outputIsInput = !hasPostProcess || (!toneMapping && !fxaa && !scaled);
+    const bool outputIsInput = fg.equal(input, colorPassOutput);
     if ((outputIsInput && viewRenderTarget == mRenderTarget && msaa > 1) ||
         (!outputIsInput && blending)) {
         input = ppm.dynamicScaling(fg, msaa, scaled, blending, input, ldrFormat);
@@ -405,10 +407,11 @@ void FRenderer::renderJob(ArenaScope& arena, FView& view) {
 
 FrameGraphId<FrameGraphTexture> FRenderer::refractionPass(FrameGraph& fg,
         ColorPassConfig const& config, RenderPass const& pass,
-        FrameGraphId<FrameGraphTexture> input,
-        FView const& view, TargetBufferFlags clearFlags) noexcept {
+        FView const& view, TargetBufferFlags clearFlags) const noexcept {
 
-    FrameGraphId<FrameGraphTexture> output = input;
+    auto& blackboard = fg.getBlackboard();
+    auto input = blackboard.get<FrameGraphTexture>("color");
+    FrameGraphId<FrameGraphTexture> output;
 
     // find the first refractive object
     Command const* const refraction = std::partition_point(pass.begin(), pass.end(),
@@ -420,17 +423,29 @@ FrameGraphId<FrameGraphTexture> FRenderer::refractionPass(FrameGraph& fg,
             (refraction->key & RenderPass::PASS_MASK) == uint64_t(RenderPass::Pass::REFRACT);
 
     if (UTILS_UNLIKELY(hasScreenSpaceRefraction)) {
+        PostProcessManager& ppm = mEngine.getPostProcessManager();
         // clear the color/depth buffers, which will orphan (and cull) the color pass
-        fg.getBlackboard().remove("color");
-        fg.getBlackboard().remove("depth");
+        input.clear();
+        blackboard.remove("color");
+        blackboard.remove("depth");
 
         RenderPass opaquePass(pass);
         opaquePass.getCommands().set(
                 const_cast<Command*>(pass.begin()),
                 const_cast<Command*>(refraction));
-        output = colorPass(fg, config, opaquePass, clearFlags, view.getClearColor());
+        input = colorPass(fg, config, opaquePass, clearFlags, view.getClearColor());
 
-        // TODO: copy the color buffer into a texture, generate the mip-levels, feed the next pass
+//        // TODO: copy the color buffer into a texture, generate the mip-levels, feed the next pass
+//        input = ppm.resolve(fg, "Resolved Refraction Buffer", input);
+//
+//        fg.addPass<FrameGraph::Empty>("dummy",
+//                [&](FrameGraph::Builder& builder, auto& data) {
+//                    builder.sideEffect();
+//                    builder.read(input);
+//                },
+//                [](FrameGraphPassResources const& resources, auto const& data,
+//                        backend::DriverApi& driver) {
+//                });
 
         // set-up the refraction pass
         RenderPass translucentPass(pass);
@@ -438,8 +453,12 @@ FrameGraphId<FrameGraphTexture> FRenderer::refractionPass(FrameGraph& fg,
                 const_cast<Command*>(refraction),
                 const_cast<Command*>(pass.end()));
         output = colorPass(fg, config, translucentPass,TargetBufferFlags::NONE);
-    }
 
+//        output = ppm.resolve(fg, "Resolved Color Buffer", output);
+
+    } else {
+        output = input;
+    }
     return output;
 }
 
